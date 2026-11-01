@@ -235,6 +235,11 @@
         height: 0;
         border-top: 0.2mm dashed #000;
       }
+      .tape-cut-across {
+        position: absolute;
+        width: 0;
+        border-left: 0.2mm dashed #000;
+      }
 
       /* Neue Styles für A4-Visualisierung */
       .page-preview {
@@ -914,6 +919,22 @@
                     <div class="input-group"><div class="text-sm text-gray-600">Brother QL drivers keep about 1.5mm free on each edge</div></div>
                   </div>
                   <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapeLabelWidth" class="text-sm font-medium text-gray-700">Label width across the tape (mm)</label></div>
+                    <div class="input-group">
+                      <input type="number" id="tapeLabelWidth" x-model.number="tapeLabelWidth" @input="renderLabels()" min="3" step="0.5"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 number-input" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">Limited to the printable width; smaller values allow several labels side by side on wide tape</div></div>
+                  </div>
+                  <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapeColumns" class="text-sm font-medium text-gray-700">Labels side by side</label></div>
+                    <div class="input-group">
+                      <input type="number" id="tapeColumns" x-model.number="tapeColumns" @input="renderLabels()" min="0" step="1"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 number-input" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">0 = as many as fit. Now: <span x-text="tapeColumnsUsed"></span> × <span x-text="tapeRows"></span> rows</div></div>
+                  </div>
+                  <div class="input-row" x-show="isTape">
                     <div class="input-group"><label for="tapeLabelLength" class="text-sm font-medium text-gray-700">Label length (mm)</label></div>
                     <div class="input-group">
                       <input type="number" id="tapeLabelLength" x-model.number="tapeLabelLength" @input="updatePageDimensions()" min="5" step="0.5"
@@ -927,7 +948,7 @@
                       <input type="number" id="tapeGap" x-model.number="tapeGap" @input="updatePageDimensions()" min="0" step="0.5"
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 number-input" />
                     </div>
-                    <div class="input-group"><div class="text-sm text-gray-600">Space for cutting the labels apart</div></div>
+                    <div class="input-group"><div class="text-sm text-gray-600">Space for cutting the labels apart (along and across the tape)</div></div>
                   </div>
                   <div class="input-row" x-show="isTape">
                     <div class="input-group"><label for="tapeLead" class="text-sm font-medium text-gray-700">Margin at both ends (mm)</label></div>
@@ -1831,6 +1852,12 @@
           tapeLabelCount: 10,
           tapeQrSize: 8.5,
           tapeCutMarks: true,
+          // Wide tape (e.g. 62mm) can hold several labels side by side.
+          // Label width across the tape is capped at the printable width; columns 0 = as many as fit.
+          tapeLabelWidth: 10,
+          tapeColumns: 0,
+          tapeColumnsUsed: 1,
+          tapeRows: 1,
 
           get isTape() {
             return this.pageFormat === 'Tape';
@@ -1843,10 +1870,19 @@
             const L = num(this.tapeLabelLength);
             const G = num(this.tapeGap);
             const lead = num(this.tapeLead);
-            const q = Math.min(num(this.tapeQrSize), P);
+            const w = Math.min(num(this.tapeLabelWidth) || P, P);
+            const q = Math.min(num(this.tapeQrSize), w);
             const n = this.labels.length;
-            const total = 2 * lead + n * L + Math.max(0, n - 1) * G;
-            const inset = (W - P) / 2;
+            const maxColumns = Math.max(1, Math.floor((P + G) / (w + G)));
+            const requested = parseInt(this.tapeColumns, 10) || 0;
+            const columns = Math.min(requested > 0 ? requested : maxColumns, maxColumns, n);
+            const rows = Math.ceil(n / columns);
+            const total = 2 * lead + rows * L + Math.max(0, rows - 1) * G;
+            // The block of columns is centered within the printable width
+            const blockWidth = columns * w + (columns - 1) * G;
+            const inset = (W - blockWidth) / 2;
+            this.tapeColumnsUsed = columns;
+            this.tapeRows = rows;
             const qrOffset = num(this.qrCodeSpacing);
             const fontMm = num(this.fontSize) * 25.4 / 72;
 
@@ -1886,26 +1922,33 @@
               tape.style.height = mm(this.pageHeight);
 
               this.labels.forEach((label, i) => {
-                const start = lead + i * (L + G);
-                const labelDiv = box('tape-label', inset, start, P, L);
+                const row = Math.floor(i / columns);
+                const col = i % columns;
+                const start = lead + row * (L + G);
+                const labelDiv = box('tape-label', inset + col * (w + G), start, w, L);
 
                 const qrImg = document.createElement('img');
                 qrImg.className = 'tape-qr';
                 qrImg.src = label.qrCodeUrl;
-                Object.assign(qrImg.style, { left: mm((P - q) / 2), top: mm(qrOffset), width: mm(q), height: mm(q) });
+                Object.assign(qrImg.style, { left: mm((w - q) / 2), top: mm(qrOffset), width: mm(q), height: mm(q) });
                 labelDiv.appendChild(qrImg);
 
-                // Text runs along the tape (writing-mode), centered across the tape
-                const textDiv = box('tape-text', Math.max(0, (P - fontMm) / 2), qrOffset + q + 1);
+                // Text runs along the tape (writing-mode), centered across the label
+                const textDiv = box('tape-text', Math.max(0, (w - fontMm) / 2), qrOffset + q + 1);
                 textDiv.innerText = label.text;
                 labelDiv.appendChild(textDiv);
 
                 tape.appendChild(labelDiv);
-
-                if (this.tapeCutMarks && i > 0) {
-                  tape.appendChild(box('tape-cut', 0, start - G / 2, W));
-                }
               });
+
+              if (this.tapeCutMarks) {
+                for (let row = 1; row < rows; row++) {
+                  tape.appendChild(box('tape-cut', 0, lead + row * (L + G) - G / 2, W));
+                }
+                for (let col = 1; col < columns; col++) {
+                  tape.appendChild(box('tape-cut-across', inset + col * (w + G) - G / 2, 0, null, total));
+                }
+              }
             });
           },
 
@@ -2403,7 +2446,9 @@
               margin: parseFloat(alpineApp.tapeLead),
               labelCount: parseInt(alpineApp.tapeLabelCount),
               qrSize: parseFloat(alpineApp.tapeQrSize),
-              cutMarks: alpineApp.tapeCutMarks
+              cutMarks: alpineApp.tapeCutMarks,
+              labelWidth: parseFloat(alpineApp.tapeLabelWidth),
+              columns: parseInt(alpineApp.tapeColumns)
             },
             pageMargins: {
               viewMode: alpineApp.marginViewMode,
@@ -2622,6 +2667,8 @@
               alpineApp.tapeLabelCount = config.tape.labelCount;
               alpineApp.tapeQrSize = config.tape.qrSize;
               alpineApp.tapeCutMarks = config.tape.cutMarks;
+              alpineApp.tapeLabelWidth = config.tape.labelWidth ?? alpineApp.tapeLabelWidth;
+              alpineApp.tapeColumns = config.tape.columns ?? 0;
             }
 
             if (config.pageMargins) {
