@@ -199,6 +199,43 @@
         line-height: 1;
       }
       
+      /* Continuous tape: labels are positioned absolutely along the tape.
+         No CSS rotation here - a rotated element makes Chrome shrink the whole printed page. */
+      .tape-preview {
+        margin: 20px auto;
+        padding: 12px;
+        background: #e5e7eb;
+        border-radius: 8px;
+      }
+      .tape {
+        position: relative;
+        background: #fff;
+        overflow: hidden;
+      }
+      .tape-label {
+        position: absolute;
+        box-sizing: border-box;
+        overflow: hidden;
+      }
+      .tape-qr {
+        position: absolute;
+        display: block;
+      }
+      .tape-text {
+        position: absolute;
+        writing-mode: vertical-rl;
+        font-size: var(--text-size, 8pt);
+        font-family: var(--text-font, Arial);
+        font-weight: var(--text-weight, normal);
+        line-height: 1;
+        white-space: nowrap;
+      }
+      .tape-cut {
+        position: absolute;
+        height: 0;
+        border-top: 0.2mm dashed #000;
+      }
+
       /* Neue Styles für A4-Visualisierung */
       .page-preview {
         position: relative;
@@ -829,6 +866,7 @@
                         <option value="A5">A5 (148×210mm)</option>
                         <option value="Letter">US Letter (215.9×279.4mm)</option>
                         <option value="Legal">US Legal (215.9×355.6mm)</option>
+                        <option value="Tape">Continuous tape (e.g. Brother QL)</option>
                       </select>
                     </div>
                     <div class="input-group">
@@ -837,7 +875,7 @@
                   </div>
 
                   <!-- Page Orientation -->
-                  <div class="input-row">
+                  <div class="input-row" x-show="!isTape">
                     <div class="input-group">
                       <label class="text-sm font-medium text-gray-700 flex items-center">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -858,6 +896,73 @@
                     </div>
                   </div>
 
+                  <!-- Continuous tape settings: one label after another along the tape -->
+                  <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapeWidth" class="text-sm font-medium text-gray-700">Tape width (mm)</label></div>
+                    <div class="input-group">
+                      <input type="number" id="tapeWidth" x-model.number="tapeWidth" @input="updatePageDimensions()" min="12" step="0.1"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 number-input" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">e.g. 12 for Brother DK-22214</div></div>
+                  </div>
+                  <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapePrintableWidth" class="text-sm font-medium text-gray-700">Printable width (mm)</label></div>
+                    <div class="input-group">
+                      <input type="number" id="tapePrintableWidth" x-model.number="tapePrintableWidth" @input="updatePageDimensions()" min="1" step="0.1"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 number-input" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">Brother QL drivers keep about 1.5mm free on each edge</div></div>
+                  </div>
+                  <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapeLabelLength" class="text-sm font-medium text-gray-700">Label length (mm)</label></div>
+                    <div class="input-group">
+                      <input type="number" id="tapeLabelLength" x-model.number="tapeLabelLength" @input="updatePageDimensions()" min="5" step="0.5"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 number-input" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">Length of one label along the tape</div></div>
+                  </div>
+                  <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapeGap" class="text-sm font-medium text-gray-700">Gap between labels (mm)</label></div>
+                    <div class="input-group">
+                      <input type="number" id="tapeGap" x-model.number="tapeGap" @input="updatePageDimensions()" min="0" step="0.5"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 number-input" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">Space for cutting the labels apart</div></div>
+                  </div>
+                  <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapeLead" class="text-sm font-medium text-gray-700">Margin at both ends (mm)</label></div>
+                    <div class="input-group">
+                      <input type="number" id="tapeLead" x-model.number="tapeLead" @input="updatePageDimensions()" min="0" step="0.5"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 number-input" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">Brother QL drivers do not print the first and last ~3mm</div></div>
+                  </div>
+                  <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapeLabelCount" class="text-sm font-medium text-gray-700">Number of labels</label></div>
+                    <div class="input-group">
+                      <input type="number" id="tapeLabelCount" x-model.number="tapeLabelCount" @input="generateLabels()" min="1" max="200" step="1"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 number-input" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">The tape length follows from this</div></div>
+                  </div>
+                  <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapeQrSize" class="text-sm font-medium text-gray-700">QR code size (mm)</label></div>
+                    <div class="input-group">
+                      <input type="number" id="tapeQrSize" x-model.number="tapeQrSize" @input="renderLabels()" min="3" step="0.5"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 number-input" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">Limited to the printable width</div></div>
+                  </div>
+                  <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapeCutMarks" class="text-sm font-medium text-gray-700">Cut marks</label></div>
+                    <div class="input-group">
+                      <input type="checkbox" id="tapeCutMarks" x-model="tapeCutMarks" @change="renderLabels()"
+                        style="width: 1rem; height: 1rem;"
+                        class="mt-1 rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">Dashed line in the middle of each gap</div></div>
+                  </div>
+
                   <div class="input-row">
                     <div class="input-group">
                       <div class="text-sm text-gray-600 mt-1">
@@ -866,11 +971,20 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- Tape printing needs a custom paper size of exactly this size, otherwise Chrome scales the page -->
+                <div x-show="isTape" class="mt-4 rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
+                  <p class="font-semibold">Paper size for printing: <span x-text="pageWidth + ' × ' + pageHeight + ' mm'"></span></p>
+                  <p class="mt-1">Create a custom paper size of exactly this size once and select it in the print dialog
+                    (Chrome on macOS: <kbd>⌥⌘P</kbd> opens the system dialog → Paper Size → Manage Custom Sizes).
+                    Set scaling to 100%. If the paper size does not match, the browser shrinks the labels.</p>
+                  <p class="mt-1">Tip: keep the number of labels fixed, then one custom paper size is enough.</p>
+                </div>
               </div>
             </div>
 
             <!-- Page Margins Settings -->
-            <div class="section-group border rounded-lg p-4 mb-4">
+            <div class="section-group border rounded-lg p-4 mb-4" x-show="!isTape">
               <div class="flex items-center justify-between cursor-pointer" @click="pageMarginsOpen = !pageMarginsOpen">
                 <h2 class="section-title mb-0">Page Margins</h2>
                 <svg class="w-6 h-6 transform transition-transform" :class="{ 'rotate-180': pageMarginsOpen }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -980,7 +1094,7 @@
             </div>
 
             <!-- Label Spacing Settings -->
-            <div class="section-group border rounded-lg p-4 mb-4">
+            <div class="section-group border rounded-lg p-4 mb-4" x-show="!isTape">
               <div class="flex items-center justify-between cursor-pointer" @click="labelDimensionsOpen = !labelDimensionsOpen">
                 <h2 class="section-title mb-0">Label Dimensions</h2>
                 <svg class="w-6 h-6 transform transition-transform" :class="{ 'rotate-180': labelDimensionsOpen }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1097,7 +1211,7 @@
             </div>
 
             <!-- Label Count Settings -->
-            <div class="section-group border rounded-lg p-4 mb-4">
+            <div class="section-group border rounded-lg p-4 mb-4" x-show="!isTape">
               <div class="flex items-center justify-between cursor-pointer" @click="labelCountOpen = !labelCountOpen">
                 <h2 class="section-title mb-0">Label Count</h2>
                 <svg class="w-6 h-6 transform transition-transform" :class="{ 'rotate-180': labelCountOpen }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1305,7 +1419,7 @@
             </div>
 
             <!-- Print Testing Section -->
-            <div class="section-group border rounded-lg p-4 mb-4">
+            <div class="section-group border rounded-lg p-4 mb-4" x-show="!isTape">
               <div class="flex items-center justify-between">
                 <div class="flex items-center">
                   <h2 class="section-title mb-0">Print Testing</h2>
@@ -1471,7 +1585,10 @@
     </div>
 
       <div class="preview-container print-hidden">
-        <div class="page-preview" :class="{
+        <div class="tape-preview" x-show="isTape">
+          <div class="tape" id="tape-container"></div>
+        </div>
+        <div class="page-preview" x-show="!isTape" :class="{
           'margin-view-page': marginViewMode === 'page',
           'margin-view-label': marginViewMode === 'label',
           'margin-view-both': marginViewMode === 'both'
@@ -1555,7 +1672,8 @@
 
       <!-- Separate print version -->
       <div class="print-only">
-        <div class="page-preview" :class="{
+        <div class="tape" id="tape-print-container" x-show="isTape"></div>
+        <div class="page-preview" x-show="!isTape" :class="{
           'margin-view-page': marginViewMode === 'page' && printTestingEnabled,
           'margin-view-label': marginViewMode === 'label' && printTestingEnabled,
           'margin-view-both': marginViewMode === 'both' && printTestingEnabled
@@ -1703,6 +1821,104 @@
           tonerSaveMode: "off",
           printTestingEnabled: false,
 
+          // Continuous tape (e.g. Brother QL with DK-22214, 12mm): one label after another along the tape.
+          // The page is tapeWidth wide and as long as all labels plus the margin at both ends.
+          tapeWidth: 12,
+          tapePrintableWidth: 8.9,
+          tapeLabelLength: 25,
+          tapeGap: 2,
+          tapeLead: 3,
+          tapeLabelCount: 10,
+          tapeQrSize: 8.5,
+          tapeCutMarks: true,
+
+          get isTape() {
+            return this.pageFormat === 'Tape';
+          },
+
+          renderTape() {
+            const num = (v) => parseFloat(v) || 0;
+            const W = num(this.tapeWidth);
+            const P = Math.min(num(this.tapePrintableWidth), W);
+            const L = num(this.tapeLabelLength);
+            const G = num(this.tapeGap);
+            const lead = num(this.tapeLead);
+            const q = Math.min(num(this.tapeQrSize), P);
+            const n = this.labels.length;
+            const total = 2 * lead + n * L + Math.max(0, n - 1) * G;
+            const inset = (W - P) / 2;
+            const qrOffset = num(this.qrCodeSpacing);
+            const fontMm = num(this.fontSize) * 25.4 / 72;
+
+            this.pageWidth = Math.round(W * 10) / 10;
+            this.pageHeight = Math.round(total * 10) / 10;
+
+            // Kept in the page (not only added in printLabels) so that Ctrl/Cmd+P also prints at tape size
+            this.setTapePageStyle(`
+              @page { size: ${this.pageWidth}mm ${this.pageHeight}mm; margin: 0; }
+              @media print {
+                html, body, .print-only {
+                  width: ${this.pageWidth}mm !important;
+                  height: ${this.pageHeight}mm !important;
+                  overflow: hidden !important;
+                }
+              }`);
+
+            const root = document.documentElement;
+            root.style.setProperty('--text-size', `${this.fontSize}pt`);
+            root.style.setProperty('--text-font', this.fontFamily);
+            root.style.setProperty('--text-weight', this.fontWeight);
+
+            const mm = (v) => `${v}mm`;
+            const box = (cls, left, top, width, height) => {
+              const el = document.createElement('div');
+              el.className = cls;
+              Object.assign(el.style, { left: mm(left), top: mm(top) });
+              if (width != null) el.style.width = mm(width);
+              if (height != null) el.style.height = mm(height);
+              return el;
+            };
+
+            ['tape-container', 'tape-print-container'].forEach((id) => {
+              const tape = document.getElementById(id);
+              tape.innerHTML = '';
+              tape.style.width = mm(this.pageWidth);
+              tape.style.height = mm(this.pageHeight);
+
+              this.labels.forEach((label, i) => {
+                const start = lead + i * (L + G);
+                const labelDiv = box('tape-label', inset, start, P, L);
+
+                const qrImg = document.createElement('img');
+                qrImg.className = 'tape-qr';
+                qrImg.src = label.qrCodeUrl;
+                Object.assign(qrImg.style, { left: mm((P - q) / 2), top: mm(qrOffset), width: mm(q), height: mm(q) });
+                labelDiv.appendChild(qrImg);
+
+                // Text runs along the tape (writing-mode), centered across the tape
+                const textDiv = box('tape-text', Math.max(0, (P - fontMm) / 2), qrOffset + q + 1);
+                textDiv.innerText = label.text;
+                labelDiv.appendChild(textDiv);
+
+                tape.appendChild(labelDiv);
+
+                if (this.tapeCutMarks && i > 0) {
+                  tape.appendChild(box('tape-cut', 0, start - G / 2, W));
+                }
+              });
+            });
+          },
+
+          setTapePageStyle(css) {
+            let style = document.getElementById('tape-page-style');
+            if (!style) {
+              style = document.createElement('style');
+              style.id = 'tape-page-style';
+              document.head.appendChild(style);
+            }
+            style.textContent = css;
+          },
+
           // Page format definitions
           pageFormats: {
             'A4': { width: 210, height: 297 },
@@ -1712,6 +1928,11 @@
           },
 
           updatePageDimensions() {
+            if (this.isTape) {
+              // Tape mode works out the page size from the tape settings, see renderTape()
+              this.generateLabels();
+              return;
+            }
             const format = this.pageFormats[this.pageFormat];
             if (this.pageOrientation === 'portrait') {
               this.pageWidth = format.width;
@@ -1720,8 +1941,8 @@
               this.pageWidth = format.height;
               this.pageHeight = format.width;
             }
-            this.calculateMargins();
-            this.renderLabels();
+            // Regenerate, because switching from tape mode changes the number of labels
+            this.generateLabels();
           },
 
           calculateMargins() {
@@ -1823,7 +2044,9 @@
 
           generateLabels() {
             this.labels = [];
-            let totalLabels = this.labelsPerRow * this.maxRows;
+            let totalLabels = this.isTape
+              ? Math.max(1, parseInt(this.tapeLabelCount, 10) || 1)
+              : this.labelsPerRow * this.maxRows;
             let startNumberInt = parseInt(this.startNumber, 10);
             for (let i = 0; i < totalLabels; i++) {
               let number = startNumberInt + i;
@@ -1837,6 +2060,11 @@
           },
 
           renderLabels() {
+            if (this.isTape) {
+              this.renderTape();
+              return;
+            }
+            this.setTapePageStyle('');
             let container = document.getElementById("label-container");
             let printContainer = document.getElementById("print-label-container");
             container.innerHTML = "";
@@ -2167,6 +2395,16 @@
               format: alpineApp.pageFormat,
               orientation: alpineApp.orientation
             },
+            tape: {
+              width: parseFloat(alpineApp.tapeWidth),
+              printableWidth: parseFloat(alpineApp.tapePrintableWidth),
+              labelLength: parseFloat(alpineApp.tapeLabelLength),
+              gap: parseFloat(alpineApp.tapeGap),
+              margin: parseFloat(alpineApp.tapeLead),
+              labelCount: parseInt(alpineApp.tapeLabelCount),
+              qrSize: parseFloat(alpineApp.tapeQrSize),
+              cutMarks: alpineApp.tapeCutMarks
+            },
             pageMargins: {
               viewMode: alpineApp.marginViewMode,
               top: {
@@ -2375,6 +2613,17 @@
               alpineApp.orientation = config.pageFormat.orientation;
             }
 
+            if (config.tape) {
+              alpineApp.tapeWidth = config.tape.width;
+              alpineApp.tapePrintableWidth = config.tape.printableWidth;
+              alpineApp.tapeLabelLength = config.tape.labelLength;
+              alpineApp.tapeGap = config.tape.gap;
+              alpineApp.tapeLead = config.tape.margin;
+              alpineApp.tapeLabelCount = config.tape.labelCount;
+              alpineApp.tapeQrSize = config.tape.qrSize;
+              alpineApp.tapeCutMarks = config.tape.cutMarks;
+            }
+
             if (config.pageMargins) {
               alpineApp.marginViewMode = config.pageMargins.viewMode;
               alpineApp.targetPaddingTop = config.pageMargins.top.target;
@@ -2426,8 +2675,8 @@
               alpineApp.areAllSectionsOpen = config.uiState.areAllSectionsOpen;
             }
 
-            // Aktualisiere die Labels
-            alpineApp.generateLabels();
+            // Aktualisiere die Labels (updatePageDimensions also regenerates them)
+            alpineApp.updatePageDimensions();
 
             showNotification('✓ Configuration loaded successfully');
             console.log('Konfiguration erfolgreich geladen und angewendet');

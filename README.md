@@ -8,6 +8,7 @@ A web-based tool for generating printable QR code labels for Paperless-ngx ASN (
 - Precise control over page margins and label spacing
 - Target/Actual value comparison for exact print adjustments
 - Multiple page format support (A4, A5, US Letter, Legal)
+- Continuous tape mode for label printers such as the Brother QL series
 - Portrait and landscape orientation
 - Configurable text formatting (font family, size, weight)
 - Visual page preview with margin indicators
@@ -154,6 +155,30 @@ The Toner Save Mode is a feature that helps reduce toner consumption during test
 - The feature is accessible via the checkbox in the Print Testing section
 - Recommended for initial layout and alignment testing
 - Should be disabled for final production prints to ensure optimal QR code readability
+
+## Continuous Tape (Brother QL and other label printers)
+
+Select **Continuous tape** as page format to print one label after another on a roll, e.g. a Brother QL-1110NWB with DK-22214 (12mm continuous paper tape).
+
+- Set tape width, printable width, label length, gap and the number of labels. The page length follows from these values.
+- The app shows the resulting paper size, e.g. `12 × 274 mm` for 10 labels of 25mm with a 2mm gap and 3mm at both ends.
+- Optional dashed cut marks are printed in the middle of each gap.
+
+### Printing on macOS with Chrome
+
+The browser only prints at 100% if the printer's paper size matches the page exactly. Otherwise it silently shrinks the labels.
+
+1. In Chrome press **⌥⌘P** to open the macOS print dialog.
+2. Paper Size → **Manage Custom Sizes…** → add a size with exactly the width and height shown in the app. Choose the Brother QL as non-printable area.
+3. Select this paper size, set scaling to **100%** and print.
+
+Keep the number of labels fixed, then one custom paper size is enough.
+
+### Values for the Brother QL-1110NWB
+
+- The AirPrint driver keeps about 1.5mm free along each edge of the tape and about 3mm at the start and end. On 62mm tape, 58mm were printable in tests; on 12mm tape expect roughly 9mm.
+- Default settings: printable width 8.9mm, QR code 8.5mm, margin at both ends 3mm.
+- `tools/brother-testseite.html` is a test page with a millimetre scale to measure the printable area and the printed lengths of your own printer.
 
 ## Printing Setup and Configuration
 
