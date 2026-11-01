@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Endlosband Testdruck</title>
+<style id="page-style"></style>
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; margin: 16px; background: #f4f4f5; color: #111; }
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 16px; max-width: 900px; background: #fff; padding: 16px; border-radius: 8px; }
+  .controls label { font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+  .controls input, .controls select { font-size: 14px; padding: 4px 6px; }
+  .info { margin: 12px 0; font-size: 14px; max-width: 900px; }
+  button { font-size: 15px; padding: 8px 16px; cursor: pointer; }
+  .preview { background: #fff; display: inline-block; padding: 12px; border-radius: 8px; overflow: hidden; }
+
+  /* Der Band-Streifen: x = Laufrichtung des Bandes, y = Bandbreite */
+  .tape { position: relative; background: #fff; outline: 1px dashed #aaa; }
+  /* Hochformat: Text läuft entlang des Bandes. writing-mode statt transform: rotate,
+     denn eine CSS-Drehung lässt Chrome die ganze Druckseite verkleinern. */
+  .tape.portrait .txt { writing-mode: vertical-rl; }
+  .label { position: absolute; box-sizing: border-box; border: 0.15mm solid #000; overflow: hidden; }
+  .printable { position: absolute; box-sizing: border-box; border: 0.15mm dotted #c00; }
+  .qr { position: absolute; background:
+        repeating-conic-gradient(#000 0 25%, #fff 0 50%) 0 0 / 1mm 1mm; outline: 0.2mm solid #000; }
+  .txt { position: absolute; font-size: 7pt; line-height: 1; white-space: nowrap; }
+  .tick { position: absolute; background: #000; }
+
+  /* Ohne das lässt Chrome Hintergrundfarben (QR-Muster, Skala) beim Druck weg */
+  .tape, .tape * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  @media print {
+    html, body { margin: 0 !important; padding: 0 !important; background: #fff; overflow: hidden; }
+    .no-print { display: none !important; }
+    /* block statt inline-block: sonst entsteht unter dem Streifen eine Zeilenhöhe Luft -> leere 2. Seite */
+    .preview { display: block; padding: 0; border-radius: 0; }
+    .tape { outline: none; }
+  }
+</style>
+</head>
+<body>
+<div class="no-print">
+  <h1 style="font-size:20px">Testdruck Endlosband (Brother QL)</h1>
+  <div class="controls">
+    <label>Bandbreite (mm)<input id="tapeWidth" type="number" step="0.1" value="12"></label>
+    <label>Bedruckbare Breite (mm)<input id="printWidth" type="number" step="0.1" value="8.9"></label>
+    <label>Label-Länge (mm)<input id="labelLen" type="number" step="0.5" value="25"></label>
+    <label>Abstand zwischen Labels (mm)<input id="gap" type="number" step="0.5" value="2"></label>
+    <label>Anzahl Labels<input id="count" type="number" min="1" value="4"></label>
+    <label>Vor-/Nachlauf je Ende (mm)<input id="lead" type="number" step="0.5" value="3"></label>
+    <label>QR-Größe (mm)<input id="qr" type="number" step="0.5" value="8.5"></label>
+    <label>Seitenausrichtung
+      <select id="orient">
+        <option value="portrait">Hochformat: Bandbreite × Länge</option>
+        <option value="landscape">Querformat: Länge × Bandbreite</option>
+      </select>
+    </label>
+  </div>
+  <p class="info" id="info"></p>
+  <p class="info">Rot gepunktet: angenommener bedruckbarer Bereich. Striche oben: Millimeterskala, langer Strich alle 5 mm.
+    Nach dem Druck nachmessen: Label-Länge, Abstand, und ob der rote Bereich vollständig auf dem Band ist.</p>
+  <p><button onclick="window.print()">Drucken</button></p>
+</div>
+<div class="preview"><div id="tape" class="tape"></div></div>
+
+<script>
+  const ids = ['tapeWidth','printWidth','labelLen','gap','count','lead','qr','orient'];
+  const el = id => document.getElementById(id);
+  const num = id => parseFloat(el(id).value) || 0;
+
+  function render() {
+    const W = num('tapeWidth'), P = Math.min(num('printWidth'), W), L = num('labelLen');
+    const G = num('gap'), N = Math.max(1, Math.round(num('count'))), lead = num('lead'), Q = num('qr');
+    const portrait = el('orient').value === 'portrait';
+    const total = 2 * lead + N * L + (N - 1) * G;
+    const inset = (W - P) / 2;
+
+    const pw = portrait ? W : total, ph = portrait ? total : W;
+    const tape = el('tape');
+    tape.innerHTML = '';
+    tape.className = 'tape' + (portrait ? ' portrait' : '');
+    tape.style.width = pw + 'mm';
+    tape.style.height = ph + 'mm';
+
+    // Positionen werden in Band-Koordinaten angegeben: a = entlang des Bandes, c = quer (von oben im Querformat).
+    // Im Hochformat wird daraus top/right, d. h. das Bild ist im Uhrzeigersinn gedreht – ohne CSS-Drehung.
+    const mm = v => v == null ? '' : v + 'mm';
+    const place = (node, a, c, la, lc) => Object.assign(node.style, portrait
+      ? { top: mm(a), right: mm(c), width: mm(lc), height: mm(la) }
+      : { left: mm(a), top: mm(c), width: mm(la), height: mm(lc) });
+    const add = (parent, cls, a, c, la, lc) => {
+      const d = document.createElement('div');
+      d.className = cls;
+      place(d, a, c, la, lc);
+      parent.append(d);
+      return d;
+    };
+
+    const q = Math.min(Q, P);
+    for (let i = 0; i < N; i++) {
+      const lab = add(tape, 'label', lead + i * (L + G), inset, L, P);
+      add(lab, 'qr', 0.5, (P - q) / 2, q, q);
+      add(lab, 'txt', q + 1.2, P / 2 - 1.2).textContent = `ASN${String(i + 1).padStart(4, '0')}`;
+    }
+    add(tape, 'printable', 0, inset, total, P);
+    for (let m = 0; m <= Math.floor(total); m++) {
+      add(tape, 'tick', m, inset, 0.15, m % 5 ? 0.8 : 1.6);
+    }
+
+    el('page-style').textContent = `@page { size: ${pw}mm ${ph}mm; margin: 0; }
+      @media print { html, body { width: ${pw}mm; height: ${ph}mm; } }`;
+    el('info').textContent = `Seitengröße für den Druck: ${pw.toFixed(1)} mm × ${ph.toFixed(1)} mm `
+      + `(${N} Labels à ${L} mm, Gesamtlänge ${total.toFixed(1)} mm).`;
+  }
+  // Werte lassen sich auch per URL vorgeben, z. B. ?tapeWidth=62&count=5
+  new URLSearchParams(location.search).forEach((v, k) => { if (ids.includes(k)) el(k).value = v; });
+  ids.forEach(id => el(id).addEventListener('input', render));
+  render();
+</script>
+</body>
+</html>
