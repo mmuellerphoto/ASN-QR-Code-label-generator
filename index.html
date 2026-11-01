@@ -212,6 +212,10 @@
         background: #fff;
         overflow: hidden;
       }
+      /* Separate pages (one per row) visibly in the preview */
+      .tape-preview .tape + .tape {
+        margin-top: 4mm;
+      }
       .tape-label {
         position: absolute;
         box-sizing: border-box;
@@ -859,7 +863,7 @@
                     <div class="input-group">
                       <label class="text-sm font-medium text-gray-700 flex items-center">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2z" />
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         Page Format
                       </label>
@@ -983,6 +987,15 @@
                     </div>
                     <div class="input-group"><div class="text-sm text-gray-600">Dashed line in the middle of each gap</div></div>
                   </div>
+                  <div class="input-row" x-show="isTape">
+                    <div class="input-group"><label for="tapePagePerRow" class="text-sm font-medium text-gray-700">New page after each row</label></div>
+                    <div class="input-group">
+                      <input type="checkbox" id="tapePagePerRow" x-model="tapePagePerRow" @change="renderLabels()"
+                        style="width: 1rem; height: 1rem;"
+                        class="mt-1 rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                    </div>
+                    <div class="input-group"><div class="text-sm text-gray-600">Lets the printer cut after every row (Brother: cut at end of each page)</div></div>
+                  </div>
 
                   <div class="input-row">
                     <div class="input-group">
@@ -995,11 +1008,14 @@
 
                 <!-- Tape printing needs a custom paper size of exactly this size, otherwise Chrome scales the page -->
                 <div x-show="isTape" class="mt-4 rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
-                  <p class="font-semibold">Paper size for printing: <span x-text="pageWidth + ' × ' + pageHeight + ' mm'"></span></p>
+                  <p class="font-semibold">Paper size for printing: <span x-text="pageWidth + ' × ' + pageHeight + ' mm'"></span>
+                    <span x-show="tapePages > 1" x-text="'(' + tapePages + ' pages)'"></span></p>
                   <p class="mt-1">Create a custom paper size of exactly this size once and select it in the print dialog
                     (Chrome on macOS: <kbd>⌥⌘P</kbd> opens the system dialog → Paper Size → Manage Custom Sizes).
                     Set scaling to 100%. If the paper size does not match, the browser shrinks the labels.</p>
                   <p class="mt-1">Tip: keep the number of labels fixed, then one custom paper size is enough.</p>
+                  <p class="mt-1" x-show="tapePagePerRow">For automatic cutting choose "cut after each page" in the printer options
+                    (macOS: Finishing Options → Cut). The pages are printed one after another on the same tape.</p>
                 </div>
               </div>
             </div>
@@ -1607,7 +1623,7 @@
 
       <div class="preview-container print-hidden">
         <div class="tape-preview" x-show="isTape">
-          <div class="tape" id="tape-container"></div>
+          <div id="tape-container"></div>
         </div>
         <div class="page-preview" x-show="!isTape" :class="{
           'margin-view-page': marginViewMode === 'page',
@@ -1693,7 +1709,7 @@
 
       <!-- Separate print version -->
       <div class="print-only">
-        <div class="tape" id="tape-print-container" x-show="isTape"></div>
+        <div id="tape-print-container" x-show="isTape"></div>
         <div class="page-preview" x-show="!isTape" :class="{
           'margin-view-page': marginViewMode === 'page' && printTestingEnabled,
           'margin-view-label': marginViewMode === 'label' && printTestingEnabled,
@@ -1858,6 +1874,8 @@
           tapeColumns: 0,
           tapeColumnsUsed: 1,
           tapeRows: 1,
+          tapePagePerRow: false,
+          tapePages: 1,
 
           get isTape() {
             return this.pageFormat === 'Tape';
@@ -1877,26 +1895,41 @@
             const requested = parseInt(this.tapeColumns, 10) || 0;
             const columns = Math.min(requested > 0 ? requested : maxColumns, maxColumns, n);
             const rows = Math.ceil(n / columns);
-            const total = 2 * lead + rows * L + Math.max(0, rows - 1) * G;
+            // With one page per row the printer can cut after every row (Brother: "cut at end of page"),
+            // so each page holds one row plus the margin at both ends and there is no gap between rows.
+            const rowsPerPage = this.tapePagePerRow ? 1 : rows;
+            const pages = Math.ceil(rows / rowsPerPage);
+            const pageLength = 2 * lead + rowsPerPage * L + (rowsPerPage - 1) * G;
             // The block of columns is centered within the printable width
             const blockWidth = columns * w + (columns - 1) * G;
             const inset = (W - blockWidth) / 2;
             this.tapeColumnsUsed = columns;
             this.tapeRows = rows;
+            this.tapePages = pages;
             const qrOffset = num(this.qrCodeSpacing);
             const fontMm = num(this.fontSize) * 25.4 / 72;
 
             this.pageWidth = Math.round(W * 10) / 10;
-            this.pageHeight = Math.round(total * 10) / 10;
+            this.pageHeight = Math.round(pageLength * 10) / 10;
 
-            // Kept in the page (not only added in printLabels) so that Ctrl/Cmd+P also prints at tape size
+            // Kept in the page (not only added in printLabels) so that Ctrl/Cmd+P also prints at tape size.
+            // The print container flows normally so that every .tape sheet becomes exactly one page.
             this.setTapePageStyle(`
               @page { size: ${this.pageWidth}mm ${this.pageHeight}mm; margin: 0; }
               @media print {
                 html, body, .print-only {
                   width: ${this.pageWidth}mm !important;
-                  height: ${this.pageHeight}mm !important;
-                  overflow: hidden !important;
+                  height: auto !important;
+                }
+                .print-only {
+                  position: static !important;
+                }
+                .main-layout {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                }
+                .tape:not(:last-child) {
+                  break-after: page;
                 }
               }`);
 
@@ -1916,38 +1949,46 @@
             };
 
             ['tape-container', 'tape-print-container'].forEach((id) => {
-              const tape = document.getElementById(id);
-              tape.innerHTML = '';
-              tape.style.width = mm(this.pageWidth);
-              tape.style.height = mm(this.pageHeight);
+              const container = document.getElementById(id);
+              container.innerHTML = '';
 
-              this.labels.forEach((label, i) => {
-                const row = Math.floor(i / columns);
-                const col = i % columns;
-                const start = lead + row * (L + G);
-                const labelDiv = box('tape-label', inset + col * (w + G), start, w, L);
+              for (let page = 0; page < pages; page++) {
+                const tape = box('tape', 0, 0, this.pageWidth, this.pageHeight);
+                tape.style.left = tape.style.top = '';
+                const firstRow = page * rowsPerPage;
+                const pageRows = Math.min(rowsPerPage, rows - firstRow);
 
-                const qrImg = document.createElement('img');
-                qrImg.className = 'tape-qr';
-                qrImg.src = label.qrCodeUrl;
-                Object.assign(qrImg.style, { left: mm((w - q) / 2), top: mm(qrOffset), width: mm(q), height: mm(q) });
-                labelDiv.appendChild(qrImg);
+                for (let r = 0; r < pageRows; r++) {
+                  const start = lead + r * (L + G);
+                  for (let col = 0; col < columns; col++) {
+                    const label = this.labels[(firstRow + r) * columns + col];
+                    if (!label) break;
+                    const labelDiv = box('tape-label', inset + col * (w + G), start, w, L);
 
-                // Text runs along the tape (writing-mode), centered across the label
-                const textDiv = box('tape-text', Math.max(0, (w - fontMm) / 2), qrOffset + q + 1);
-                textDiv.innerText = label.text;
-                labelDiv.appendChild(textDiv);
+                    const qrImg = document.createElement('img');
+                    qrImg.className = 'tape-qr';
+                    qrImg.src = label.qrCodeUrl;
+                    Object.assign(qrImg.style, { left: mm((w - q) / 2), top: mm(qrOffset), width: mm(q), height: mm(q) });
+                    labelDiv.appendChild(qrImg);
 
-                tape.appendChild(labelDiv);
-              });
+                    // Text runs along the tape (writing-mode), centered across the label
+                    const textDiv = box('tape-text', Math.max(0, (w - fontMm) / 2), qrOffset + q + 1);
+                    textDiv.innerText = label.text;
+                    labelDiv.appendChild(textDiv);
 
-              if (this.tapeCutMarks) {
-                for (let row = 1; row < rows; row++) {
-                  tape.appendChild(box('tape-cut', 0, lead + row * (L + G) - G / 2, W));
+                    tape.appendChild(labelDiv);
+                  }
                 }
-                for (let col = 1; col < columns; col++) {
-                  tape.appendChild(box('tape-cut-across', inset + col * (w + G) - G / 2, 0, null, total));
+
+                if (this.tapeCutMarks) {
+                  for (let r = 1; r < pageRows; r++) {
+                    tape.appendChild(box('tape-cut', 0, lead + r * (L + G) - G / 2, W));
+                  }
+                  for (let col = 1; col < columns; col++) {
+                    tape.appendChild(box('tape-cut-across', inset + col * (w + G) - G / 2, 0, null, this.pageHeight));
+                  }
                 }
+                container.appendChild(tape);
               }
             });
           },
@@ -2448,7 +2489,8 @@
               qrSize: parseFloat(alpineApp.tapeQrSize),
               cutMarks: alpineApp.tapeCutMarks,
               labelWidth: parseFloat(alpineApp.tapeLabelWidth),
-              columns: parseInt(alpineApp.tapeColumns)
+              columns: parseInt(alpineApp.tapeColumns),
+              pagePerRow: alpineApp.tapePagePerRow
             },
             pageMargins: {
               viewMode: alpineApp.marginViewMode,
@@ -2669,6 +2711,7 @@
               alpineApp.tapeCutMarks = config.tape.cutMarks;
               alpineApp.tapeLabelWidth = config.tape.labelWidth ?? alpineApp.tapeLabelWidth;
               alpineApp.tapeColumns = config.tape.columns ?? 0;
+              alpineApp.tapePagePerRow = config.tape.pagePerRow ?? false;
             }
 
             if (config.pageMargins) {

@@ -164,6 +164,7 @@ Select **Continuous tape** as page format to print one label after another on a 
 - The app shows the resulting paper size, e.g. `12 × 274 mm` for 10 labels of 25mm with a 2mm gap and 3mm at both ends.
 - Optional dashed cut marks are printed in the middle of each gap.
 - Wide tape holds several labels side by side: set **Label width across the tape** (e.g. 10mm) and leave **Labels side by side** at 0 to fit as many as possible. On 62mm tape (58mm printable) this gives 5 columns, so 25 labels fit on 62 × 139 mm. Cut marks are then printed in both directions.
+- **New page after each row** puts every row on its own page (e.g. 5 pages of 62 × 31 mm instead of one page of 62 × 139 mm). With "cut after each page" enabled in the printer options (macOS: Finishing Options), a Brother QL cuts the tape after every row, so only the cuts between the columns are left to do by hand. The custom paper size then has to match one page.
 
 ### Printing on macOS with Chrome
 
