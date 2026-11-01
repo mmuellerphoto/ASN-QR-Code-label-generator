@@ -6,6 +6,7 @@
     <title>QR Code Label Generator for ASN in Paperless-ngx</title>
     <link rel="canonical" href="https://tobiasmaier.info/asn-qr-code-label-generator/" />
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script src="lib/qrcode.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <style>
       /* Neue Styles für die Spaltenüberschriften */
@@ -1977,18 +1978,26 @@
           },
 
           // Modify QR code URL based on toner save mode
+          // QR codes are generated locally (lib/qrcode.js) as SVG data URLs - no external service needed.
+          // Toner save mode adds a quiet zone of 1-3 modules, which shrinks the printed code.
           getQRCodeUrl(text) {
-            let baseUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(text)}`;
-            switch(this.tonerSaveMode) {
-              case "light":
-                return `${baseUrl}&qzone=1&format=svg&ecc=L`;
-              case "medium":
-                return `${baseUrl}&qzone=2&format=svg&ecc=L`;
-              case "heavy":
-                return `${baseUrl}&qzone=3&format=svg&ecc=L`;
-              default:
-                return `${baseUrl}&size=100x100`;
+            const quietZone = { light: 1, medium: 2, heavy: 3 }[this.tonerSaveMode] || 0;
+            const qr = qrcode(0, 'L');
+            qr.addData(text);
+            qr.make();
+            const count = qr.getModuleCount();
+            const size = count + quietZone * 2;
+            let path = '';
+            for (let row = 0; row < count; row++) {
+              for (let col = 0; col < count; col++) {
+                if (qr.isDark(row, col)) {
+                  path += `M${col + quietZone},${row + quietZone}h1v1h-1z`;
+                }
+              }
             }
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">`
+              + `<rect width="${size}" height="${size}" fill="#fff"/><path d="${path}" fill="#000"/></svg>`;
+            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
           },
 
           // Methode zum Zurücksetzen der Print Testing Einstellungen

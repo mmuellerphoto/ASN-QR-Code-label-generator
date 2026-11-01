@@ -15,6 +15,7 @@ A web-based tool for generating printable QR code labels for Paperless-ngx ASN (
 - Print-optimized output
 - Responsive design
 - No installation required - runs in browser
+- QR codes are generated locally in the browser (no external QR service)
 - Flexible label sizing for various applications
 
 ## Technical Details
@@ -195,7 +196,7 @@ The Toner Save Mode is a feature that helps reduce toner consumption during test
 
 - [Alpine.js](https://alpinejs.dev/) - For reactive functionality
 - [Tailwind CSS](https://tailwindcss.com/) - For styling
-- [QR Server API](https://goqr.me/api/) - For QR code generation
+- [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) by Kazuhiko Arase (MIT, bundled as `lib/qrcode.js`) - For local QR code generation. QR codes are created in the browser as SVG, so no ASN numbers are sent to an external service.
 
 ## License
 
